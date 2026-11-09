@@ -1,0 +1,78 @@
+name: fork launcher (offline accounts)
+
+# Fork-only release: Horizon's own launcher release needs the maintainer's signing key and the
+# macOS/ARM runners this fork doesn't have, so this builds the Windows x64 launcher on a
+# GitHub-hosted runner and publishes it unsigned. It never self-updates.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RUSTFLAGS: -C target-feature=+crt-static
+  TAG: launcher@0.2.0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher
+          shared-key: fork-launcher-windows-x64
+      - name: Build
+        working-directory: launcher
+        run: cargo build --release --locked
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp launcher/target/release/horizon-launcher.exe out/horizon-launcher.exe
+          cp out/horizon-launcher.exe out/horizon-launcher-setup.exe
+          (cd out && 7z a horizon-launcher-windows-x64.zip horizon-launcher.exe)
+          (cd out && sha256sum horizon-launcher-windows-x64.zip horizon-launcher-setup.exe > SHA256SUMS)
+          cat out/SHA256SUMS
+          ./out/horizon-launcher.exe --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: horizon-launcher-windows-x64
+          path: |
+            out/horizon-launcher-windows-x64.zip
+            out/horizon-launcher-setup.exe
+            out/SHA256SUMS
+          if-no-files-found: error
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<'EOF'
+          ## Horizon launcher 0.2.0 — offline accounts (Windows x64)
+
+          This fork builds the launcher with **offline mode on by default**: play singleplayer, LAN
+          and offline-mode servers with an offline name, without signing in to Microsoft.
+
+          - **Windows x64, unsigned.** SmartScreen may warn; choose "More info → Run anyway".
+          - `horizon-launcher-windows-x64.zip` is the launcher; `horizon-launcher-setup.exe` is the
+            same binary under the installer name.
+          - The game files still come from your own Minecraft install, prepared by the launcher.
+          - No self-update: this release is not signed with Horizon's release key.
+          - Online-mode servers still need a real Microsoft account with Minecraft.
+
+          Set offline mode off in Settings → Developer options, or run
+          `horizon-launcher settings offline-mode off`, to restore the owner gate.
+          EOF
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Horizon launcher 0.2.0 — offline accounts (Windows x64)" \
+            --notes-file notes.md --latest=false \
+            out/horizon-launcher-windows-x64.zip out/horizon-launcher-setup.exe out/SHA256SUMS
