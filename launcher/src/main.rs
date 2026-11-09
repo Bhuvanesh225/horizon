@@ -3462,6 +3462,10 @@ impl Launcher {
                 "Not prepared. Sign in with the Microsoft account that owns Minecraft {version} first.",
                 &[("version", &version)],
             ),
+            None if !prepared => trf(
+                "Not prepared. Horizon can download Minecraft {version} from Mojang for your account, or use your own install.",
+                &[("version", &version)],
+            ),
             None => backend::resources_summary(prepared, !silent, &version),
         };
         let mut prepare = button(
@@ -3524,7 +3528,28 @@ impl Launcher {
                     cx.notify();
                 }),
             )),
-            None => div().child(prepare),
+            None => {
+                let mut download = button(
+                    "prepare-download",
+                    "Download and prepare",
+                    Kind::Secondary,
+                    &t,
+                )
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    // Downloading Mojang's files is the one step that needs an account
+                    // that owns the game; ask for it instead of failing silently.
+                    if this.owner == Some(true) {
+                        this.prepare(backend::MinecraftFrom::Mojang);
+                    } else {
+                        this.sign_in_to_play();
+                    }
+                    cx.notify();
+                }));
+                if self.preparing {
+                    download = disabled(download);
+                }
+                div().flex().gap(px(8.)).child(prepare).child(download)
+            }
         };
         let owner = self.owner == Some(true);
         let minecraft = self.settings.minecraft_dir.as_deref().map_or_else(
