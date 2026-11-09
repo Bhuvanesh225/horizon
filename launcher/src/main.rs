@@ -4116,7 +4116,7 @@ impl Launcher {
                     .child(group("About", "info-box"))
                     .child(index_row(
                         n + 9,
-                        "Horizon Offline Fork",
+                        div().child("Horizon Offline Fork"),
                         Some(
                             div()
                                 .child(

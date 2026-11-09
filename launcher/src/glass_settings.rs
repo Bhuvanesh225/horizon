@@ -464,7 +464,7 @@ impl Launcher {
         let about = card()
             .child(index_row(
                 0,
-                "Horizon Offline Fork",
+                div().child("Horizon Offline Fork"),
                 Some(
                     div()
                         .child(
