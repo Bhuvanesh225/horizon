@@ -1,5 +1,7 @@
-//! The owner gate from the outside: with no account that owns Minecraft: Java Edition in the
-//! launcher, neither `horizon-launcher play` nor the MCP server's play starts the game.
+//! Offline mode from the outside: with no account that owns Minecraft: Java Edition in the
+//! launcher, neither `horizon-launcher play` nor the MCP server's play ask for a sign-in any more
+//! (they stop at the unprepared version instead). Turning offline mode off brings the owner gate
+//! back.
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -7,7 +9,7 @@ use std::process::{Command, Output, Stdio};
 const REFUSED: &str = "Sign in with a Microsoft account that owns Minecraft: Java Edition to play.";
 
 /// Fresh homes with one installed (not prepared) version and an offline name, as a player who
-/// played offline before the gate has.
+/// played offline before the gate has. No `settings.json`: offline mode is on by default.
 fn home(name: &str) -> PathBuf {
     let root =
         std::env::temp_dir().join(format!("horizon-owner-gate-{name}-{}", std::process::id()));
@@ -44,8 +46,28 @@ fn text(out: &Output) -> String {
 }
 
 #[test]
-fn the_cli_refuses_to_play_without_an_owner() {
+fn the_cli_plays_offline_without_an_owner() {
     let root = home("cli");
+    let out = launcher(&root, &["play"]).output().unwrap();
+    let said = text(&out);
+    // No sign-in refusal: the owner gate is open. The only thing left to stop it is the
+    // unprepared version, which the test never prepares.
+    assert!(!said.contains(REFUSED), "{said}");
+    assert!(said.contains("not prepared"), "{said}");
+    // The offline name is still there.
+    let accounts = std::fs::read_to_string(root.join("launcher/accounts.json")).unwrap();
+    assert!(accounts.contains("Builder_1"), "{accounts}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn offline_mode_off_restores_the_owner_gate() {
+    let root = home("gate");
+    std::fs::write(
+        root.join("launcher/settings.json"),
+        r#"{"offline_mode":false}"#,
+    )
+    .unwrap();
     let out = launcher(&root, &["play"]).output().unwrap();
     let said = text(&out);
     assert!(!out.status.success(), "{said}");
@@ -59,7 +81,7 @@ fn the_cli_refuses_to_play_without_an_owner() {
 }
 
 #[test]
-fn the_mcp_server_refuses_to_play_without_an_owner() {
+fn the_mcp_server_plays_offline_without_an_owner() {
     let root = home("mcp");
     let mut child = launcher(&root, &["mcp"])
         .stdin(Stdio::piped())
@@ -84,6 +106,7 @@ fn the_mcp_server_refuses_to_play_without_an_owner() {
         .expect("a reply to play");
     assert_eq!(reply["result"]["isError"], true, "{reply}");
     let said = reply["result"]["content"][0]["text"].as_str().unwrap();
-    assert!(said.contains(REFUSED), "{said}");
+    assert!(!said.contains(REFUSED), "{said}");
+    assert!(said.contains("not prepared"), "{said}");
     let _ = std::fs::remove_dir_all(&root);
 }

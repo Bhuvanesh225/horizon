@@ -1,8 +1,9 @@
-//! Developer options: a Settings section nothing in the window points to. Seven clicks on the
-//! sidebar's "Launcher x.y.z" reveal it for this run; it stays shown while one of its options is
-//! on. Its one option lets offline names play without an account that owns the game
-//! (`backend::Settings::dev_offline`). The game still comes from the player's own install: the
-//! launcher downloads Mojang's files only for an owner (`backend::download_for_owner`).
+//! Offline mode's Settings section (`backend::Settings::offline_mode`): its one option lets
+//! offline names play without an account that owns the game, from the window, the command line
+//! and the MCP server. It is on by default and shown with the rest of Settings; the seven clicks
+//! on the sidebar's launcher version still open Settings here. The game still comes from the
+//! player's own install: the launcher downloads Mojang's files only for an owner
+//! (`backend::download_for_owner`).
 use super::*;
 
 /// Clicks on the launcher's version that reveal the section.
@@ -21,15 +22,12 @@ impl Launcher {
         }
     }
 
-    /// The section, when revealed or when one of its options is on.
+    /// The section: offline mode is on by default, so it shows with the rest of Settings.
     pub(super) fn dev_options_section(&self, cx: &mut Context<Self>) -> Option<Div> {
-        if !self.dev_options && !self.settings.dev_offline {
-            return None;
-        }
         let t = self.theme;
-        let toggle = switch("dev-offline", self.settings.dev_offline, &t).on_click(cx.listener(
+        let toggle = switch("dev-offline", self.settings.offline_mode(), &t).on_click(cx.listener(
             |this, _: &ClickEvent, _, cx| {
-                this.settings.dev_offline = !this.settings.dev_offline;
+                this.settings.offline_mode = Some(!this.settings.offline_mode());
                 this.save_settings();
                 cx.notify();
             },

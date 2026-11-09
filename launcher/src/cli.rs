@@ -128,9 +128,9 @@ enum AccountCmd {
     },
     /// Play as this account, or as one of your offline names
     Select { who: String },
-    /// Play offline (LAN, offline-mode servers) beside a signed-in account that owns the game:
-    /// as NAME (kept to switch back to; 3 to 16 letters, digits or _), or as the name the game
-    /// made up
+    /// Play offline (singleplayer, LAN, offline-mode servers) without a Microsoft account that
+    /// owns the game: as NAME (kept to switch back to; 3 to 16 letters, digits or _), or as the
+    /// name the game made up. Offline mode is on by default (`settings offline-mode on|off`)
     Offline { name: Option<String> },
     /// Forget one of your offline names; its skin and cape go with it
     ForgetOffline { name: String },
@@ -858,7 +858,9 @@ enum Cmd {
     /// shows Horizon's landscape), native-cache-gib N (combined native compilation cache limit
     /// in GiB, default 30; 0 disables automatic cleanup), native-profile performance|dev|release (the profile native
     /// mods build with: performance is incremental, dev rebuilds a mod quickest for a slow game,
-    /// release is slowest to build and slightly faster to play)
+    /// release is slowest to build and slightly faster to play), offline-mode on|off (play
+    /// singleplayer, LAN and offline-mode servers without a Microsoft account that owns the game;
+    /// on by default)
     Settings {
         #[arg(value_parser = SETTING_KEYS)]
         key: Option<String>,
@@ -1006,7 +1008,7 @@ pub fn command() -> clap::Command {
 pub const AI_COMMANDS: [&str; 2] = ["mcp", "agent-config"];
 
 /// The keys `settings` sets.
-const SETTING_KEYS: [&str; 15] = [
+const SETTING_KEYS: [&str; 16] = [
     "selected-version",
     "minecraft-dir",
     "server-dir",
@@ -1022,6 +1024,7 @@ const SETTING_KEYS: [&str; 15] = [
     "background",
     "native-profile",
     "native-cache-gib",
+    "offline-mode",
 ];
 
 fn on_off(value: &str) -> Result<bool, String> {
@@ -1130,6 +1133,7 @@ fn set_setting(s: &mut backend::Settings, key: &str, value: &str) -> Result<(), 
                 s.proxy = Some(value.trim().to_string());
             }
         }
+        "offline-mode" => s.offline_mode = Some(on_off(value)?),
         _ => return Err(format!("No setting {key}.")),
     }
     Ok(())
@@ -1155,6 +1159,7 @@ fn settings_json(s: &backend::Settings) -> serde_json::Value {
         "background": horizon_launcher::themes::background(&backend::data_dir(), s.background.as_deref()),
         "native_profile": native_mods::Profile::chosen(s).name(),
         "native_cache_gib": s.native_cache_gib.unwrap_or(native_mods::DEFAULT_CACHE_GIB),
+        "offline_mode": s.offline_mode(),
         "no_ai": backend::no_ai(),
     })
 }
@@ -1561,10 +1566,6 @@ fn execute(command: Cmd, as_json: bool) -> Result<(), String> {
             }
             cmd.args(arg);
             let started = std::time::Instant::now();
-            if let Some(name) = accounts.name_arg() {
-                cmd.arg("--name").arg(name);
-            }
-            cmd.envs(accounts.look_env());
             let vars = instance.vars(cmd.get_program());
             cmd.envs(vars.iter().map(|(k, v)| (k, v)));
             let played = attached(horizon_launcher::launch::wrap(cmd, &instance.launch));
@@ -2073,7 +2074,11 @@ fn account_command(action: AccountCmd, as_json: bool) -> Result<(), String> {
                 ),
                 (None, None) => return Err(find(&accounts, &who).unwrap_err()),
             };
-            accounts.play_as(account::store(), player)?;
+            accounts.play_as_with(
+                account::store(),
+                player,
+                backend::Settings::load().offline_mode(),
+            )?;
             accounts.save()?;
             println!("The game plays as {name}.");
         }
@@ -2082,7 +2087,11 @@ fn account_command(action: AccountCmd, as_json: bool) -> Result<(), String> {
                 Some(n) => account::Player::Offline(n),
                 None => account::Player::GameName,
             };
-            accounts.play_as(account::store(), player)?;
+            accounts.play_as_with(
+                account::store(),
+                player,
+                backend::Settings::load().offline_mode(),
+            )?;
             accounts.save()?;
             match accounts.name_arg() {
                 Some(n) => println!("The game plays offline as {n}."),
@@ -3820,6 +3829,18 @@ mod tests {
         );
         set_setting(&mut settings, "language", "system").unwrap();
         assert_eq!(settings.language, None);
+    }
+
+    #[test]
+    fn offline_mode_setting_turns_the_owner_gate_off_and_on() {
+        let mut settings = backend::Settings::default();
+        // On unless turned off.
+        assert!(settings.offline_mode());
+        set_setting(&mut settings, "offline-mode", "off").unwrap();
+        assert!(!settings.offline_mode());
+        set_setting(&mut settings, "offline-mode", "on").unwrap();
+        assert!(settings.offline_mode());
+        assert!(set_setting(&mut settings, "offline-mode", "maybe").is_err());
     }
 
     #[test]

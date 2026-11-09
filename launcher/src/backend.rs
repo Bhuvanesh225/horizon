@@ -3189,13 +3189,15 @@ pub fn client_as(tag: &str, who: Option<&account::Player>) -> Result<Command, St
     play_step("reading the sign-in");
     let hint = |refused: String| format!("{refused} {}", crate::i18n::tr(SIGN_IN_HINT));
     let session = match who {
-        None => account::session_for_game(&game_home(), false).map_err(|refused| {
-            // A keyring that didn't answer isn't a missing sign-in (#12179).
-            match refused.keyring {
-                Some(why) => why,
-                None => hint(refused.to_string()),
-            }
-        }),
+        None => account::session_for_game(&game_home(), Settings::load().offline_mode()).map_err(
+            |refused| {
+                // A keyring that didn't answer isn't a missing sign-in (#12179).
+                match refused.keyring {
+                    Some(why) => why,
+                    None => hint(refused.to_string()),
+                }
+            },
+        ),
         Some(who) => account::session_for_game_as(&game_home(), who).map_err(hint),
     }?;
     if let Err(e) = need_prepared(tag) {
@@ -3215,6 +3217,15 @@ pub fn client_as(tag: &str, who: Option<&account::Player>) -> Result<Command, St
     }
     if let Some(e) = account::take_unsaved() {
         eprintln!("{e}");
+    }
+    if who.is_none() {
+        // An offline name the player picked: the game's `--name`, skin and cape. A signed-in
+        // account's name comes with its session instead.
+        let accounts = account::Accounts::load();
+        if let Some(name) = accounts.name_arg() {
+            cmd.arg("--name").arg(name);
+        }
+        cmd.envs(accounts.look_env());
     }
     append_game_args(&mut cmd);
     Ok(cmd)
@@ -4415,6 +4426,11 @@ impl WhilePlaying {
     }
 }
 
+/// Serialization: offline mode is on by default, so only "off" reaches the file.
+fn offline_mode_is_on(value: &Option<bool>) -> bool {
+    (*value).unwrap_or(true)
+}
+
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
     pub selected: Option<String>,
@@ -4519,12 +4535,18 @@ pub struct Settings {
     /// An older file's switch for the release profile, read when `native_profile` is unset.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub native_release: bool,
-    /// Developer options (hidden: seven clicks on the sidebar's launcher version reveal them):
-    /// offline names play without an account that owns the game, in the window only
-    /// (`account::Accounts::play_as_with`, `account::launch_for_game`). Never a download: the game still
-    /// comes from the player's own install. Off by default, and absent from the file while off.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub dev_offline: bool,
+    /// Offline mode: play singleplayer, LAN and offline-mode servers without a Microsoft account
+    /// that owns the game, in the window, the command line and the MCP server
+    /// (`account::Accounts::play_as_with`, `account::launch_for_game`). Never a download: the game
+    /// still comes from the player's own install. On by default (unset means on), and absent from
+    /// the file while on; `"offline_mode": false` restores the owner gate. Read the old
+    /// `dev_offline` key too, so a file from before the rename keeps its answer.
+    #[serde(
+        default,
+        alias = "dev_offline",
+        skip_serializing_if = "offline_mode_is_on"
+    )]
+    pub offline_mode: Option<bool>,
 }
 
 impl Settings {
@@ -4590,6 +4612,11 @@ impl Settings {
     /// Whether old versions are deleted after an install.
     pub fn auto_prune(&self) -> bool {
         self.prune_old_versions.unwrap_or(true)
+    }
+    /// Whether offline mode is on: offline names play without a Microsoft account that owns the
+    /// game. Unset means on.
+    pub fn offline_mode(&self) -> bool {
+        self.offline_mode.unwrap_or(true)
     }
     /// The plates' white as a fraction (0 to 0.16): [`glass`](Self::glass) in percent.
     pub fn glass_tint(&self) -> f32 {
@@ -4791,7 +4818,7 @@ mod tests {
 
     /// The launcher downloads Mojang's game files (client jar, libraries, assets) only for an
     /// account the services said owns the game: never without one, and never past the gate by
-    /// the developer option (`Settings::dev_offline`), whose pass has no owner.
+    /// offline mode (`Settings::offline_mode`), whose pass has no owner.
     #[test]
     fn mojang_downloads_only_for_an_owner() {
         let dir = std::env::temp_dir().join(format!("horizon-owner-only-{}", std::process::id()));
@@ -6300,6 +6327,32 @@ pub fn {f}("
         let installed = ["v2026.10.12".to_string(), "v2026.10.1".to_string()];
         assert!(select_after_update(Some("v2026.10.12"), &installed));
         assert!(!select_after_update(Some("v2026.10.1"), &installed));
+    }
+
+    #[test]
+    fn offline_mode_is_on_unless_turned_off() {
+        // No settings file, an empty one, and one from before this setting: all play offline.
+        assert!(Settings::parse("").offline_mode());
+        assert!(Settings::parse("{}").offline_mode());
+        assert!(Settings::parse(r#"{"selected": "v2026.10.13"}"#).offline_mode());
+        assert!(!Settings::parse(r#"{"offline_mode": false}"#).offline_mode());
+        assert!(Settings::parse(r#"{"offline_mode": true}"#).offline_mode());
+        // The old `dev_offline` key keeps its answer.
+        assert!(Settings::parse(r#"{"dev_offline": true}"#).offline_mode());
+        assert!(!Settings::parse(r#"{"dev_offline": false}"#).offline_mode());
+        // On is left out of the file; off is written, so the choice survives a round trip.
+        let on = Settings {
+            offline_mode: Some(true),
+            ..Settings::default()
+        };
+        assert!(!serde_json::to_string(&on).unwrap().contains("offline_mode"));
+        let off = Settings {
+            offline_mode: Some(false),
+            ..Settings::default()
+        };
+        let text = serde_json::to_string(&off).unwrap();
+        assert!(text.contains(r#""offline_mode":false"#), "{text}");
+        assert!(!Settings::parse(&text).offline_mode());
     }
 
     #[test]

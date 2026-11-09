@@ -74,6 +74,8 @@ Get **the Horizon launcher** from [playhorizon.dev](https://playhorizon.dev), or
 
 **You also need a Microsoft account that owns Minecraft: Java Edition.** You sign in with it in the launcher, which plays only with an account that owns the game ([why](docs/microsoft-account.md)). Horizon contains no Minecraft code or assets: an existing install (official launcher, Prism, MultiMC...) is reused, and without one the launcher downloads 26.3 from Mojang for your account. Step by step: [Install and first launch](https://playhorizon.dev/docs/install).
 
+> **This fork runs offline accounts by default.** No Microsoft sign-in is needed to play: the launcher plays singleplayer, LAN and offline-mode servers with an offline name, and reuses the Minecraft files already on your computer. Turn offline mode off in Settings → Developer options (or `horizon-launcher settings offline-mode off`) to bring back the owner gate above.
+
 <table>
   <tr>
     <td width="50%"><img src="docs/media/readme/launcher-home.webp" alt="The launcher's Home page: the Horizon instance, Play, the version picker, the friend invite field, screenshots and the patch log"></td>

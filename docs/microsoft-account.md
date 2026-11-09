@@ -3,8 +3,24 @@
 Horizon signs players in with their Microsoft account in the launcher and joins online-mode
 (authenticated) servers like vanilla 26.3 does. The launcher plays only with an account that owns
 Minecraft: Java Edition ([the owner gate](#the-owner-gate)); offline names, LAN and offline-mode
-servers play behind it. This note is the design, the status of each part and what Ludovic has to
-register.
+servers play behind it. This fork defaults **offline mode on**, so none of that is required to play
+singleplayer ([this fork](#this-fork-offline-mode)). This note is the design, the status of each
+part and what Ludovic has to register.
+
+## This fork: offline mode
+
+This fork turns the owner gate off by default. `backend::Settings::offline_mode` is unset = on, and
+the window, `horizon-launcher play` and the MCP `play` all pass it to `account::launch_for_game`:
+without an owner the game starts offline, with no session, as the selected offline name (or the
+name the game made up). Offline names therefore play singleplayer, LAN and offline-mode servers
+without a Microsoft account. A signed-in account that owns the game still gets its session and can
+join online-mode servers under its own name and skin.
+
+The switch is in **Settings → Developer options → Offline names without an account**, or
+`horizon-launcher settings offline-mode off` (`on` is the default). It never changes what may be
+downloaded: `backend::download_for_owner` still asks the strict owner gate, so Mojang's game files
+are only fetched for an account the services said owns the game. The rest of this note describes
+the gate as it works with offline mode off.
 
 ## What Ludovic registers (needs his accounts)
 
@@ -79,11 +95,13 @@ Decided 2026-10-27 (Ludovic, after a modder's suggestion): like other launchers,
 launcher starts the game only while an account in it owns Java Edition. Offline play stays
 possible; the launcher just doesn't offer it on its own.
 
-- **Play needs an owner.** Every Play (Home, instances and packs, `horizon-launcher play`,
+- **With offline mode off, Play needs an owner.** Every Play (Home, instances and packs, `horizon-launcher play`,
   `modpack play`, the MCP's `play`) asks `account::launch` first. It asks the Minecraft services
   again for each account, the selected one first, until one owns the game: the token renewal
   (below) if due, then entitlements and profile. Without an owner the game doesn't start and Play
   says "Sign in with a Microsoft account that owns Minecraft: Java Edition to play", with Sign in.
+  With offline mode on (this fork's default), the same calls start the game without a session
+  instead.
 - **The window says it once.** A player without an owner (one who played offline until now) sees
   the gate's screen once when the launcher opens: why Horizon needs the account ("like other
   launchers"), that worlds, offline names and settings stay where they are, and Sign in, which shows
@@ -95,12 +113,14 @@ possible; the launcher just doesn't offer it on its own.
   `secret-tool` or Keychain Access. With no network (or a sign-in that can't be renewed) the
   last answer stands: being offline never blocks a player who passed before, and the game starts
   without a session, offline. An answer of "doesn't own" (or no profile) blocks at once.
-- **Offline names play behind an owner.** They can be added and played only while an owning
+- **With offline mode off, offline names play behind an owner.** They can be added and played only while an owning
   account is signed in. Signing the last one out keeps them, and they play again once one is back.
+  With offline mode on, they are kept and play without any account.
 - **Who isn't affected:** the game binary itself (`horizon-client`, `horizon-ctl launch`, the
-  harnesses, CI), the dedicated server and `horizon-server`, the website. There is no bypass flag:
-  the launcher's tests use accounts in a memory store (`MemoryStore`, and `HORIZON_NO_KEYCHAIN`
-  for the CLI and MCP tests, which then have no owner).
+  harnesses, CI), the dedicated server and `horizon-server`, the website. Offline mode is not a
+  bypass for downloads: Mojang's files still need an owner. The launcher's tests use accounts in a
+  memory store (`MemoryStore`, and `HORIZON_NO_KEYCHAIN` for the CLI and MCP tests, which then have
+  no owner).
 
 ## Downloading the game for an owner
 
