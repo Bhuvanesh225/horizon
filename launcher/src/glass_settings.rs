@@ -464,6 +464,24 @@ impl Launcher {
         let about = card()
             .child(index_row(
                 0,
+                "Horizon Offline Fork",
+                Some(
+                    div()
+                        .child(
+                            "A fork of Horizon that allows offline accounts: singleplayer, LAN \
+                             and offline-mode servers need no Microsoft sign-in.",
+                        )
+                        .into_any_element(),
+                ),
+                Some(
+                    button("about-fork", "GitHub", Kind::Secondary, &t)
+                        .on_click(|_, _, cx| cx.open_url("https://github.com/Bhuvanesh225/horizon"))
+                        .into_any_element(),
+                ),
+                &t,
+            ))
+            .child(index_row(
+                0,
                 tr("Data folder"),
                 Some(mono(short(&backend::data_dir()))),
                 Some(
