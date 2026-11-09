@@ -58,25 +58,26 @@ jobs:
         run: |
           set -euo pipefail
           cat > notes.md <<'EOF'
-          ## Horizon launcher 0.2.999 — offline accounts (Windows x64)
+          ## Horizon launcher 0.2.999 - offline accounts (Windows x64)
 
-          This fork builds the launcher with **offline mode on by default**: play singleplayer, LAN
-          and offline-mode servers with an offline name, without signing in to Microsoft.
+          This is **Horizon Offline Fork**, a fork of Horizon that allows offline accounts: offline
+          mode is on by default, so singleplayer, LAN and offline-mode servers play with an offline
+          name and need no Microsoft sign-in.
 
-          - **Windows x64, unsigned.** SmartScreen may warn; choose "More info → Run anyway".
+          - **Windows x64, unsigned.** SmartScreen may warn; choose "More info" then "Run anyway".
           - `horizon-launcher-windows-x64.zip` is the launcher; `horizon-launcher-setup.exe` is the
             same binary under the installer name.
           - The game files still come from your own Minecraft install, prepared by the launcher.
           - No self-update: this release is not signed with Horizon's release key.
-          - Online-mode servers still need a real Microsoft account with Minecraft.
+          - Online-mode servers still need a real Microsoft account that owns Minecraft.
 
-          Set offline mode off in Settings → Developer options, or run
+          Turn offline mode off in Settings then Developer options, or run
           `horizon-launcher settings offline-mode off`, to restore the owner gate.
           EOF
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
           fi
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Horizon launcher 0.2.999 — offline accounts (Windows x64)" \
+            --title "Horizon launcher 0.2.999 - offline accounts (Windows x64)" \
             --notes-file notes.md --latest=false \
             out/horizon-launcher-windows-x64.zip out/horizon-launcher-setup.exe out/SHA256SUMS
